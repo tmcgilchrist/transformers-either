@@ -14,14 +14,15 @@ description:
 
             Uses a pattern synonym to maintain compatibility with the old EitherT types
             but is actually ExceptT under the covers.
-       
+
 source-repository head
   type: git
   location: https://github.com/tmcgilchrist/transformers-either.git
-                
+
 library
   build-depends:
                        base                            >= 3          && < 5
+                     , text                            == 1.2.*
                      , transformers                    >= 0.4        && < 0.6
 
   ghc-options:
@@ -32,3 +33,4 @@ library
 
   exposed-modules:
                        Control.Monad.Trans.Either
+                       Control.Monad.Trans.Either.Exit
