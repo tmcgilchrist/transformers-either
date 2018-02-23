@@ -32,14 +32,20 @@ module Control.Monad.Trans.Either (
   , secondEitherT
   , hoistMaybe
   , hoistEitherT
+  , handleEitherT
+  , bracketEitherT
+  , bracketEitherT'
   ) where
 
+import           Control.Exception (SomeException)
 import           Control.Monad (Monad(..), (=<<))
+import           Control.Monad.Catch (MonadMask, catchAll, mask, throwM)
+import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except (ExceptT(..))
 
 import           Data.Maybe (Maybe, maybe)
 import           Data.Either (Either(..), either)
-import           Data.Function ((.), id)
+import           Data.Function (($), (.), const, id)
 import           Data.Functor (Functor(..))
 
 ------------------------------------------------------------------------
@@ -127,3 +133,90 @@ hoistEitherT :: (forall b. m b -> n b) -> EitherT x m a -> EitherT x n a
 hoistEitherT f =
   EitherT . f . runEitherT
 {-# INLINE hoistEitherT #-}
+
+------------------------------------------------------------------------
+-- Error handling
+
+-- | Handle an error. Equivalent to 'catchError' in 'mtl'.
+handleEitherT :: Monad m => EitherT e m a -> (e -> EitherT e m a) -> EitherT e m a
+handleEitherT thing handler = do
+  r <- lift $ runEitherT thing
+  case r of
+    Left e ->
+      handler e
+    Right a ->
+      return a
+{-# INLINE handleEitherT #-}
+
+-- | Acquire a resource in 'EitherT' and then perform an action with
+-- it, cleaning up afterwards regardless of 'left'.
+--
+-- This function does not clean up in the event of an exception.
+-- Prefer 'bracketEitherT\'' in any impure setting.
+bracketEitherT :: Monad m => EitherT e m a -> (a -> EitherT e m b) -> (a -> EitherT e m c) -> EitherT e m c
+bracketEitherT before after thing = do
+    a <- before
+    r <- thing a `handleEitherT` (\err -> after a >> left err)
+    -- If handleEitherT already triggered, then `after` already ran *and* we are
+    -- in a Left state, so `after` will not run again here.
+    _ <- after a
+    return r
+{-# INLINE bracketEitherT #-}
+
+-- | Acquire a resource in EitherT and then perform an action with it,
+-- cleaning up afterwards regardless of 'left' or exception.
+--
+-- Like 'bracketEitherT', but additionally handling exceptions.
+bracketEitherT' ::
+     MonadMask m
+  => EitherT e m a
+  -> (a -> EitherT e m c)
+  -> (a -> EitherT e m b)
+  -> EitherT e m b
+bracketEitherT' acquire release run =
+  EitherT $ bracketF
+    (runEitherT acquire)
+    (\r -> case r of
+      Left _ ->
+        -- Acquire failed, we have nothing to release
+        return . Right $ ()
+      Right r' ->
+        -- Acquire succeeded, we need to try and release
+        runEitherT (release r') >>= \x -> return $ case x of
+          Left err -> Left (Left err)
+          Right _ -> Right ())
+    (\r -> case r of
+      Left err ->
+        -- Acquire failed, we have nothing to run
+        return . Left $ err
+      Right r' ->
+        -- Acquire succeeded, we can do some work
+        runEitherT (run r'))
+{-# INLINE bracketEitherT' #-}
+
+data BracketResult a =
+    BracketOk a
+  | BracketFailedFinalizerOk SomeException
+  | BracketFailedFinalizerError a
+
+-- Bracket where you care about the output of the finalizer. If the finalizer fails
+-- with a value level fail, it will return the result of the finalizer.
+-- Finalizer:
+--  - Left indicates a value level fail.
+--  - Right indicates that the finalizer has a value level success, and its results can be ignored.
+--
+bracketF :: MonadMask m => m a -> (a -> m (Either b c)) -> (a -> m b) -> m b
+bracketF a f g =
+  mask $ \restore -> do
+    a' <- a
+    x <- restore (BracketOk `fmap` g a') `catchAll`
+           (\ex -> either BracketFailedFinalizerError (const $ BracketFailedFinalizerOk ex) `fmap` f a')
+    case x of
+      BracketFailedFinalizerOk ex ->
+        throwM ex
+      BracketFailedFinalizerError b ->
+        return b
+      BracketOk b -> do
+        z <- f a'
+        return $ either id (const b) z
+{-# INLINE bracketF #-}
