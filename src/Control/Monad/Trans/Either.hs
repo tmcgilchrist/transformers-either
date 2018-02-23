@@ -32,7 +32,7 @@ module Control.Monad.Trans.Either (
   , secondEitherT
   , hoistMaybe
   , hoistEitherT
-  , bracketEitherT
+  , bracketEitherT'
   ) where
 
 import           Control.Exception (SomeException)
@@ -136,13 +136,13 @@ hoistEitherT f =
 
 -- | Acquire a resource in EitherT and then perform an action with it,
 -- cleaning up afterwards regardless of 'left' or exception.
-bracketEitherT ::
+bracketEitherT' ::
      MonadMask m
   => EitherT e m a
   -> (a -> EitherT e m c)
   -> (a -> EitherT e m b)
   -> EitherT e m b
-bracketEitherT acquire release run =
+bracketEitherT' acquire release run =
   EitherT $ bracketF
     (runEitherT acquire)
     (\r -> case r of
