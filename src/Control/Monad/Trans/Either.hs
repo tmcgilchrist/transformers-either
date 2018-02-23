@@ -35,6 +35,8 @@ module Control.Monad.Trans.Either (
   , handleIOEitherT
   , handleEitherT
   , handlesEitherT
+  , handleLeftT
+  , bracketEitherT
   , bracketEitherT'
   ) where
 
@@ -44,6 +46,7 @@ import           Control.Monad (Monad(..), (=<<))
 import           Control.Monad.Catch (Handler (..), MonadCatch, MonadMask, catchAll, mask, throwM)
 import qualified Control.Monad.Catch as Catch
 import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except (ExceptT(..))
 
 import           Data.Maybe (Maybe, maybe)
@@ -180,8 +183,38 @@ handlesEitherT wrappers action =
       in
         foldr probe (Catch.throwM e) wrappers
 
+-- | Handle an error. Equivalent to 'catchError' in 'mtl'.
+handleLeftT :: Monad m => EitherT e m a -> (e -> EitherT e m a) -> EitherT e m a
+handleLeftT thing handler = do
+  r <- lift $ runEitherT thing
+  case r of
+    Left e ->
+      handler e
+    Right a ->
+      return a
+{-# INLINE handleLeftT #-}
+
+-- | Acquire a resource in 'EitherT' and then perform an action with
+-- it, cleaning up afterwards regardless of 'left'.
+--
+-- This function does not clean up in the event of an exception.
+-- Prefer 'bracketEitherT\'' in any impure setting.
+bracketEitherT :: Monad m => EitherT e m a -> (a -> EitherT e m b) -> (a -> EitherT e m c) -> EitherT e m c
+bracketEitherT before after thing = do
+    a <- before
+    r <- thing a `handleLeftT` (\err -> after a >> left err)
+    -- If handleLeftT already triggered, then `after` already ran *and* we are
+    -- in a Left state, so `after` will not run again here.
+    _ <- after a
+    return r
+{-# INLINE bracketEitherT #-}
+
 -- | Acquire a resource in EitherT and then perform an action with it,
 -- cleaning up afterwards regardless of 'left' or exception.
+--
+-- Like 'bracketEitherT', but the cleanup is called even when the bracketed
+-- function throws an exception. Exceptions in the bracketed function are caught
+-- to allow the cleanup to run and then rethrown.
 bracketEitherT' ::
      MonadMask m
   => EitherT e m a
@@ -207,7 +240,10 @@ bracketEitherT' acquire release run =
       Right r' ->
         -- Acquire succeeded, we can do some work
         runEitherT (run r'))
+{-# INLINE bracketEitherT' #-}
 
+-- This is for internal use only. The `bracketF` function catches all exceptions
+-- so the cleanup function can be called and then rethrow the exception.
 data BracketResult a =
     BracketOk a
   | BracketFailedFinalizerOk SomeException
@@ -233,3 +269,4 @@ bracketF a f g =
       BracketOk b -> do
         z <- f a'
         return $ either id (const b) z
+{-# INLINE bracketF #-}
