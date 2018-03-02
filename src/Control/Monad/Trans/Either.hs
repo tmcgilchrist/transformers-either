@@ -32,15 +32,26 @@ module Control.Monad.Trans.Either (
   , secondEitherT
   , hoistMaybe
   , hoistEitherT
+  , handleIOEitherT
+  , handleEitherT
+  , handlesEitherT
   ) where
 
+import           Control.Exception (Exception, IOException)
+import qualified Control.Exception as Exception
 import           Control.Monad (Monad(..), (=<<))
+import           Control.Monad.Catch (MonadCatch, Handler (..))
+import qualified Control.Monad.Catch as Catch
+import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Except (ExceptT(..))
 
 import           Data.Maybe (Maybe, maybe)
 import           Data.Either (Either(..), either)
+import           Data.Foldable (Foldable, foldr)
 import           Data.Function ((.), id)
 import           Data.Functor (Functor(..))
+
+import           System.IO (IO)
 
 ------------------------------------------------------------------------
 -- Control.Monad.Trans.Either
@@ -127,3 +138,40 @@ hoistEitherT :: (forall b. m b -> n b) -> EitherT x m a -> EitherT x n a
 hoistEitherT f =
   EitherT . f . runEitherT
 {-# INLINE hoistEitherT #-}
+
+-- | Try an `IO` action inside an `EitherT`. If the `IO` action throws an
+-- `IOException`, catch it and wrap it with the provided handler to convert it
+-- to the error type of the `EitherT` transformer. Exceptions other than
+-- `IOException` will escape the EitherT transformer.
+-- Note: `IOError` is a type synonym for `IOException`.
+handleIOEitherT :: MonadIO m => (IOException -> x) -> IO a -> EitherT x m a
+handleIOEitherT wrap =
+  firstEitherT wrap . newEitherT . liftIO . Exception.try
+{-# INLINE handleIOEitherT #-}
+
+-- | Try any monad action and catch the specified exception, wrapping it to
+-- convert it to the error type of the EitherT transformer. Exceptions other
+-- that the specified exception type will escape the `EitherT` transformer.
+-- _This_function_should_be_used_with_caution_.
+-- In particular, it is bad practice to catch SomeException because that
+-- includes asynchronous exceptions like stack/heap overflow, thread killed and
+-- user interrupt. Trying to handle `StackOverflow`, `HeapOverflow` and
+-- `ThreadKilled` exceptions could cause your program to crash.
+handleEitherT :: (MonadCatch m, Exception e) => (e -> x) -> m a -> EitherT x m a
+handleEitherT wrap =
+  firstEitherT wrap . newEitherT . Catch.try
+{-# INLINE handleEitherT #-}
+
+-- | Try a monad action and catch any of the exceptions caught by the provided
+-- handlers. The handler for each exception type needs to wrap it to convert it
+-- to the error type of the `EitherT` transformer. Exceptions not explicitly
+-- handled by the provided handlers will escape the `EitherT` transformer.
+handlesEitherT :: (Foldable f, MonadCatch m) => f (Handler m x) -> m a -> EitherT x m a
+handlesEitherT wrappers action =
+  newEitherT (fmap Right action `Catch.catch` fmap (fmap Left) handler)
+  where
+    handler e =
+      let probe (Handler h) xs =
+            maybe xs h (Exception.fromException e)
+      in
+        foldr probe (Catch.throwM e) wrappers
