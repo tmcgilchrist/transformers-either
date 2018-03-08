@@ -37,7 +37,7 @@ module Control.Monad.Trans.Either (
   , handlesEitherT
   , handleLeftT
   , bracketEitherT
-  , bracketEitherT'
+  , bracketExceptionT
   ) where
 
 import           Control.Exception (Exception, IOException, SomeException)
@@ -215,13 +215,13 @@ bracketEitherT before after thing = do
 -- Like 'bracketEitherT', but the cleanup is called even when the bracketed
 -- function throws an exception. Exceptions in the bracketed function are caught
 -- to allow the cleanup to run and then rethrown.
-bracketEitherT' ::
+bracketExceptionT ::
      MonadMask m
   => EitherT e m a
   -> (a -> EitherT e m c)
   -> (a -> EitherT e m b)
   -> EitherT e m b
-bracketEitherT' acquire release run =
+bracketExceptionT acquire release run =
   EitherT $ bracketF
     (runEitherT acquire)
     (\r -> case r of
@@ -240,7 +240,7 @@ bracketEitherT' acquire release run =
       Right r' ->
         -- Acquire succeeded, we can do some work
         runEitherT (run r'))
-{-# INLINE bracketEitherT' #-}
+{-# INLINE bracketExceptionT #-}
 
 -- This is for internal use only. The `bracketF` function catches all exceptions
 -- so the cleanup function can be called and then rethrow the exception.
