@@ -14,7 +14,8 @@ description:
 
             Uses a pattern synonym to maintain compatibility with the old EitherT types
             but is actually ExceptT under the covers.
-
+homepage:      http://github.com/tmcgilchrist/transformers-either/
+bug-reports:   http://github.com/tmcgilchrist/transformers-either/issues
 source-repository head
   type: git
   location: https://github.com/tmcgilchrist/transformers-either.git
