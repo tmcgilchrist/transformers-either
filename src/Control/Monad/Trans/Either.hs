@@ -33,7 +33,7 @@ module Control.Monad.Trans.Either (
   , hoistMaybe
   , hoistEitherT
   , handleIOEitherT
-  , handleEitherT
+  , unsafeHandleEitherT
   , handlesEitherT
   , handleLeftT
   , bracketEitherT
@@ -164,10 +164,10 @@ handleIOEitherT wrap =
 -- includes asynchronous exceptions like stack/heap overflow, thread killed and
 -- user interrupt. Trying to handle `StackOverflow`, `HeapOverflow` and
 -- `ThreadKilled` exceptions could cause your program to crash.
-handleEitherT :: (MonadCatch m, Exception e) => (e -> x) -> m a -> EitherT x m a
-handleEitherT wrap =
+unsafeHandleEitherT :: (MonadCatch m, Exception e) => (e -> x) -> m a -> EitherT x m a
+unsafeHandleEitherT wrap =
   firstEitherT wrap . newEitherT . Catch.try
-{-# INLINE handleEitherT #-}
+{-# INLINE unsafeHandleEitherT #-}
 
 -- | Try a monad action and catch any of the exceptions caught by the provided
 -- handlers. The handler for each exception type needs to wrap it to convert it
