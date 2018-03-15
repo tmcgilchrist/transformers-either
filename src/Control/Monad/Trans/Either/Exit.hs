@@ -17,7 +17,6 @@ import           System.IO (IO, stderr, hPutStrLn)
 
 import           Control.Monad.Trans.Either
 
-
 -- | orDieWithCode with an exit code of 1 in case of an error
 --
 orDie :: (e -> Text) -> EitherT e IO a -> IO a
