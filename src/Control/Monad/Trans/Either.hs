@@ -17,8 +17,8 @@
 module Control.Monad.Trans.Either (
   -- * Control.Monad.Trans.Either
     EitherT
-  , newEitherT
   , pattern EitherT
+  , newEitherT
   , runEitherT
   , eitherT
   , left
@@ -80,6 +80,9 @@ newEitherT =
   ExceptT
 {-# INLINE newEitherT #-}
 
+-- | Map over both arguments at the same time.
+--
+-- Specialised version of 'bimap' for 'EitherT'.
 eitherT :: Monad m => (x -> m b) -> (a -> m b) -> EitherT x m a -> m b
 eitherT f g m =
   either f g =<< runEitherT m
@@ -103,7 +106,7 @@ mapEitherT f =
   EitherT . f . runEitherT
 {-# INLINE mapEitherT #-}
 
--- | Hoist an "Either" into an "EitherT m"
+-- | Hoist an 'Either' into an 'EitherT' m.
 hoistEither :: Monad m => Either x a -> EitherT x m a
 hoistEither =
   EitherT . return
@@ -131,13 +134,13 @@ secondEitherT =
   bimapEitherT id
 {-# INLINE secondEitherT #-}
 
--- | Hoist a 'Maybe a' into a 'Right a'
+-- | Hoist 'Maybe' a into 'Right' a.
 hoistMaybe :: Monad m => x -> Maybe a -> EitherT x m a
 hoistMaybe x =
   maybe (left x) return
 {-# INLINE hoistMaybe #-}
 
--- | Hoist
+-- | Hoist 'Either' m into an 'Either' n.
 hoistEitherT :: (forall b. m b -> n b) -> EitherT x m a -> EitherT x n a
 hoistEitherT f =
   EitherT . f . runEitherT
@@ -146,24 +149,27 @@ hoistEitherT f =
 ------------------------------------------------------------------------
 -- Error handling
 
--- | Try an `IO` action inside an `EitherT`. If the `IO` action throws an
--- `IOException`, catch it and wrap it with the provided handler to convert it
--- to the error type of the `EitherT` transformer. Exceptions other than
--- `IOException` will escape the EitherT transformer.
--- Note: `IOError` is a type synonym for `IOException`.
+-- | Try an 'IO' action inside an 'EitherT'. If the 'IO' action throws an
+-- 'IOException', catch it and wrap it with the provided handler to convert it
+-- to the error type of the 'EitherT' transformer. Exceptions other than
+-- 'IOException' will escape the EitherT transformer.
+--
+-- Note: 'IOError' is a type synonym for 'IOException'.
 handleIOEitherT :: MonadIO m => (IOException -> x) -> IO a -> EitherT x m a
 handleIOEitherT wrap =
   firstEitherT wrap . newEitherT . liftIO . Exception.try
 {-# INLINE handleIOEitherT #-}
 
 -- | Try any monad action and catch the specified exception, wrapping it to
--- convert it to the error type of the EitherT transformer. Exceptions other
--- that the specified exception type will escape the `EitherT` transformer.
--- _This_function_should_be_used_with_caution_.
--- In particular, it is bad practice to catch SomeException because that
+-- convert it to the error type of the 'EitherT' transformer. Exceptions other
+-- that the specified exception type will escape the 'EitherT' transformer.
+--
+-- *Warning*: This function should be used with caution!
+-- In particular, it is bad practice to catch 'SomeException' because that
 -- includes asynchronous exceptions like stack/heap overflow, thread killed and
--- user interrupt. Trying to handle `StackOverflow`, `HeapOverflow` and
--- `ThreadKilled` exceptions could cause your program to crash.
+-- user interrupt. Trying to handle 'StackOverflow', 'HeapOverflow' and
+-- 'ThreadKilled' exceptions could cause your program to crash or behave in
+-- unexpected ways.
 handleEitherT :: (MonadCatch m, Exception e) => (e -> x) -> m a -> EitherT x m a
 handleEitherT wrap =
   firstEitherT wrap . newEitherT . Catch.try
@@ -171,8 +177,8 @@ handleEitherT wrap =
 
 -- | Try a monad action and catch any of the exceptions caught by the provided
 -- handlers. The handler for each exception type needs to wrap it to convert it
--- to the error type of the `EitherT` transformer. Exceptions not explicitly
--- handled by the provided handlers will escape the `EitherT` transformer.
+-- to the error type of the 'EitherT' transformer. Exceptions not explicitly
+-- handled by the provided handlers will escape the 'EitherT' transformer.
 handlesEitherT :: (Foldable f, MonadCatch m) => f (Handler m x) -> m a -> EitherT x m a
 handlesEitherT wrappers action =
   newEitherT (fmap Right action `Catch.catch` fmap (fmap Left) handler)
@@ -183,9 +189,9 @@ handlesEitherT wrappers action =
       in
         foldr probe (Catch.throwM e) wrappers
 
--- | Handle an error. Equivalent to 'catchError' in 'mtl'.
-handleLeftT :: Monad m => EitherT e m a -> (e -> EitherT e m a) -> EitherT e m a
-handleLeftT thing handler = do
+-- | Handle an error. Equivalent to 'handleError' in mtl package.
+handleLeftT :: Monad m => (e -> EitherT e m a) -> EitherT e m a -> EitherT e m a
+handleLeftT handler thing = do
   r <- lift $ runEitherT thing
   case r of
     Left e ->
@@ -198,11 +204,11 @@ handleLeftT thing handler = do
 -- it, cleaning up afterwards regardless of 'left'.
 --
 -- This function does not clean up in the event of an exception.
--- Prefer 'bracketEitherT\'' in any impure setting.
+-- Prefer 'bracketExceptionT' in any impure setting.
 bracketEitherT :: Monad m => EitherT e m a -> (a -> EitherT e m b) -> (a -> EitherT e m c) -> EitherT e m c
 bracketEitherT before after thing = do
     a <- before
-    r <- thing a `handleLeftT` (\err -> after a >> left err)
+    r <- (\err -> after a >> left err) `handleLeftT` thing a
     -- If handleLeftT already triggered, then `after` already ran *and* we are
     -- in a Left state, so `after` will not run again here.
     _ <- after a
@@ -242,7 +248,7 @@ bracketExceptionT acquire release run =
         runEitherT (run r'))
 {-# INLINE bracketExceptionT #-}
 
--- This is for internal use only. The `bracketF` function catches all exceptions
+-- This is for internal use only. The 'bracketF' function catches all exceptions
 -- so the cleanup function can be called and then rethrow the exception.
 data BracketResult a =
     BracketOk a
