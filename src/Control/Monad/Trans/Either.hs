@@ -205,6 +205,7 @@ handlesEitherT wrappers action =
       in
         foldr probe (Catch.throwM e) wrappers
 
+-- | Flipped 'handlesEitherT'.
 catchesEitherT  :: (Foldable f, MonadCatch m) => m a -> f (Handler m x) -> EitherT x m a
 catchesEitherT = flip handlesEitherT
 {-# INLINE catchesEitherT #-}
@@ -220,6 +221,7 @@ handleLeftT handler thing = do
       return a
 {-# INLINE handleLeftT #-}
 
+-- | Flipped 'handleLeftT'.
 catchLeftT  :: Monad m => EitherT e m a -> (e -> EitherT e m a) -> EitherT e m a
 catchLeftT = flip handleLeftT
 {-# INLINE catchLeftT #-}
