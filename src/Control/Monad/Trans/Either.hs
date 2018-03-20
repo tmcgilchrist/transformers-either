@@ -36,6 +36,12 @@ module Control.Monad.Trans.Either (
   , handleEitherT
   , handlesEitherT
   , handleLeftT
+
+  , catchIOEitherT
+  , catchEitherT
+  , catchesEitherT
+  , catchLeftT
+
   , bracketEitherT
   , bracketExceptionT
   ) where
@@ -52,7 +58,7 @@ import           Control.Monad.Trans.Except (ExceptT(..))
 import           Data.Maybe (Maybe, maybe)
 import           Data.Either (Either(..), either)
 import           Data.Foldable (Foldable, foldr)
-import           Data.Function (($), (.), const, id)
+import           Data.Function (($), (.), const, id, flip)
 import           Data.Functor (Functor(..))
 
 import           System.IO (IO)
@@ -160,6 +166,11 @@ handleIOEitherT wrap =
   firstEitherT wrap . newEitherT . liftIO . Exception.try
 {-# INLINE handleIOEitherT #-}
 
+-- | Flipped 'handleIOEitherT'.
+catchIOEitherT :: MonadIO m => IO a -> (IOException -> x) -> EitherT x m a
+catchIOEitherT = flip handleIOEitherT
+{-# INLINE catchIOEitherT #-}
+
 -- | Try any monad action and catch the specified exception, wrapping it to
 -- convert it to the error type of the 'EitherT' transformer. Exceptions other
 -- that the specified exception type will escape the 'EitherT' transformer.
@@ -175,6 +186,11 @@ handleEitherT wrap =
   firstEitherT wrap . newEitherT . Catch.try
 {-# INLINE handleEitherT #-}
 
+-- | Flipped 'handleEitherT'.
+catchEitherT :: (MonadCatch m, Exception e) => m a -> (e -> x) -> EitherT x m a
+catchEitherT = flip handleEitherT
+{-# INLINE catchEitherT #-}
+
 -- | Try a monad action and catch any of the exceptions caught by the provided
 -- handlers. The handler for each exception type needs to wrap it to convert it
 -- to the error type of the 'EitherT' transformer. Exceptions not explicitly
@@ -189,6 +205,11 @@ handlesEitherT wrappers action =
       in
         foldr probe (Catch.throwM e) wrappers
 
+-- | Flipped 'handlesEitherT'.
+catchesEitherT  :: (Foldable f, MonadCatch m) => m a -> f (Handler m x) -> EitherT x m a
+catchesEitherT = flip handlesEitherT
+{-# INLINE catchesEitherT #-}
+
 -- | Handle an error. Equivalent to 'handleError' in mtl package.
 handleLeftT :: Monad m => (e -> EitherT e m a) -> EitherT e m a -> EitherT e m a
 handleLeftT handler thing = do
@@ -199,6 +220,11 @@ handleLeftT handler thing = do
     Right a ->
       return a
 {-# INLINE handleLeftT #-}
+
+-- | Flipped 'handleLeftT'.
+catchLeftT  :: Monad m => EitherT e m a -> (e -> EitherT e m a) -> EitherT e m a
+catchLeftT = flip handleLeftT
+{-# INLINE catchLeftT #-}
 
 -- | Acquire a resource in 'EitherT' and then perform an action with
 -- it, cleaning up afterwards regardless of 'left'.
