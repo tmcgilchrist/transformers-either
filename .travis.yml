@@ -102,3 +102,11 @@ script:
 
 # REGENDATA ["transformers-either.cabal"]
 # EOF
+deploy:
+  skip_cleanup: true
+  provider: hackage
+  username: $HACKAGE_USERNAME
+  password: $HACKAGE_PASSWORD
+  on:
+    repo: tmcgilchrist/transformers-either
+    tags: true
