@@ -97,16 +97,8 @@ script:
   - (cd transformers-either-* && cabal check)
 
   # haddock
-  #- rm -rf ./dist-newstyle
+  - rm -rf ./dist-newstyle
   - if $HADDOCK; then cabal new-haddock -w ${HC} ${TEST} ${BENCH} all; else echo "Skipping haddock generation";fi
 
 # REGENDATA ["transformers-either.cabal"]
 # EOF
-deploy:
-  skip_cleanup: true
-  provider: hackage
-  username: $HACKAGE_USERNAME
-  password: $HACKAGE_PASSWORD
-  on:
-    repo: tmcgilchrist/transformers-either
-    tags: true
