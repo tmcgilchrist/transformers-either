@@ -9,7 +9,7 @@ synopsis:              An Either monad transformer
 category:              System
 cabal-version:         >= 1.8
 build-type:            Simple
-tested-with:           GHC == 8.4.2, GHC == 8.2.2, GHC == 8.0.2, GHC == 7.10.3
+tested-with:           GHC == 8.4.4, GHC == 8.2.2, GHC == 8.0.2, GHC == 7.10.3
 description:
             Drop in alternative to ExceptT.
 
@@ -27,6 +27,7 @@ library
                      , text                            == 1.2.*
                      , exceptions                      >= 0.6        && < 0.11
                      , transformers                    >= 0.4        && < 0.6
+                     , bifunctors
 
   ghc-options:
                        -Wall

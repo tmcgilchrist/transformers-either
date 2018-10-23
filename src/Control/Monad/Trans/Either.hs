@@ -56,11 +56,12 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except (ExceptT(..))
 
-import           Data.Maybe (Maybe, maybe)
-import           Data.Either (Either(..), either, first)
+import           Data.Bifunctor (first)
+import           Data.Either (Either(..), either)
 import           Data.Foldable (Foldable, foldr)
 import           Data.Function (($), (.), const, id, flip)
 import           Data.Functor (Functor(..))
+import           Data.Maybe (Maybe, maybe)
 
 import           System.IO (IO)
 
@@ -154,6 +155,10 @@ hoistEitherT f =
 {-# INLINE hoistEitherT #-}
 
 -- | Unify two levels of 'EitherT' using 'f'.
+--
+-- Specialised versionf of mapping over two stacked transformer bifunctors,
+-- unifying their type and squashing the result.
+-- See https://hackage.haskell.org/package/transformers-bifunctors
 unifyEitherT :: (Monad m) => (e' -> e) -> EitherT e' (EitherT e m) a -> EitherT e m a
 unifyEitherT f mx = runEitherT mx >>= hoistEither . first f
 {-# INLINE unifyEitherT #-}
