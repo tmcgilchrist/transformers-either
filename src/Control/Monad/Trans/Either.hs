@@ -32,6 +32,7 @@ module Control.Monad.Trans.Either (
   , secondEitherT
   , hoistMaybe
   , hoistEitherT
+  , unifyEitherT
   , handleIOEitherT
   , handleEitherT
   , handlesEitherT
@@ -56,7 +57,7 @@ import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except (ExceptT(..))
 
 import           Data.Maybe (Maybe, maybe)
-import           Data.Either (Either(..), either)
+import           Data.Either (Either(..), either, first)
 import           Data.Foldable (Foldable, foldr)
 import           Data.Function (($), (.), const, id, flip)
 import           Data.Functor (Functor(..))
@@ -151,6 +152,11 @@ hoistEitherT :: (forall b. m b -> n b) -> EitherT x m a -> EitherT x n a
 hoistEitherT f =
   EitherT . f . runEitherT
 {-# INLINE hoistEitherT #-}
+
+-- | Unify two levels of 'EitherT' using 'f'.
+unifyEitherT :: (Monad m) => (e' -> e) -> EitherT e' (EitherT e m) a -> EitherT e m a
+unifyEitherT f mx = runEitherT mx >>= hoistEither . first f
+{-# INLINE unifyEitherT #-}
 
 ------------------------------------------------------------------------
 -- Error handling
