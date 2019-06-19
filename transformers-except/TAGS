@@ -1,0 +1,58 @@
+
+./src/Control/Monad/Trans/Except/Exit.hs,203
+module Control.Monad.Trans.Except.Exit Control.Monad.Trans.Except.Exit0,1
+import import6,7
+orDie orDie21,22
+orDie orDie22,23
+orDieWithCode orDieWithCode32,33
+orDieWithCode orDieWithCode33,34
+
+./src/Control/Monad/Trans/Except/Extra.hs,1702
+module Control.Monad.Trans.Except.Extra Control.Monad.Trans.Except.Extra16,17
+import import48,49
+newExceptT newExceptT69,70
+newExceptT newExceptT70,71
+exceptT exceptT77,78
+exceptT exceptT78,79
+left left83,84
+left left84,85
+right right89,90
+right right90,91
+hoistEither hoistEither95,96
+hoistEither hoistEither96,97
+bimapExceptT bimapExceptT101,102
+bimapExceptT bimapExceptT102,103
+firstExceptT firstExceptT111,112
+firstExceptT firstExceptT112,113
+secondExceptT secondExceptT117,118
+secondExceptT secondExceptT118,119
+hoistMaybe hoistMaybe123,124
+hoistMaybe hoistMaybe124,125
+hoistExceptT hoistExceptT129,130
+hoistExceptT hoistExceptT130,131
+handleIOExceptT handleIOExceptT143,144
+handleIOExceptT handleIOExceptT144,145
+catchIOExceptT catchIOExceptT149,150
+catchIOExceptT catchIOExceptT150,151
+handleExceptT handleExceptT163,164
+handleExceptT handleExceptT164,165
+catchExceptT catchExceptT169,170
+catchExceptT catchExceptT170,171
+handlesExceptT handlesExceptT177,178
+handlesExceptT handlesExceptT178,179
+catchesExceptT catchesExceptT188,189
+catchesExceptT catchesExceptT189,190
+handleLeftT handleLeftT193,194
+handleLeftT handleLeftT194,195
+catchLeftT catchLeftT204,205
+catchLeftT catchLeftT205,206
+bracketExceptT bracketExceptT213,214
+bracketExceptT bracketExceptT214,215
+bracketExceptionT bracketExceptionT229,230
+bracketExceptionT bracketExceptionT235,236
+data BracketResult BracketResult258,259
+    BracketOk BracketOk259,260
+  | BracketFailedFinalizerOk BracketFailedFinalizerOk260,261
+  | BracketFailedFinalizerError BracketFailedFinalizerError261,262
+bracketF bracketF269,270
+bracketF bracketF270,271
