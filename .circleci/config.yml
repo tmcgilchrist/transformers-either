@@ -12,7 +12,7 @@ jobs:
             - mafia-work-
       - run:
           name: Build
-          command: ./bin/ci.branches
+          command: ./bin/ci
 
       - save_cache:
           paths:
