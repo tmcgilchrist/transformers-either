@@ -65,7 +65,7 @@ import           System.IO (IO)
 -- Control.Monad.Trans.Except.Extra
 
 
--- | Constructor for computations in the either monad.
+-- | Constructor for computations in the ExceptT monad.
 -- (The inverse of 'runExceptT').
 newExceptT :: m (Either x a) -> ExceptT x m a
 newExceptT =
