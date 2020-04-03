@@ -1,54 +1,64 @@
-version: 2
-jobs:
-  build-8.4.4_2.0:
+version: 2.1
+
+orbs:
+  haskell: haskell-works/haskell-build@4.1.6
+  github: haskell-works/github-release@1.3.0
+  hackage: haskell-works/hackage@1.1.0
+
+executors:
+  darwin:
+    macos:
+      xcode: 10.0
+  ghc-8_6_5_old:
     docker:
-      - image: tmcgilchrist/ci-haskell:ubuntu_xenial-8.4.4_2.0-20190211034224-5fc74b0
-
-    steps:
-      - checkout
-      - restore_cache:
-          keys:
-            - v1-mafia-8.4.4-{{ checksum "transformers-either/transformers-either.cabal" }}-{{ checksum "transformers-either/transformers-either.cabal" }}
-            - mafia-work-
-      - run:
-          name: Build
-          command: ./bin/ci
-
-      - save_cache:
-          paths:
-            - /root/.cabal
-            - /root/.mafia/
-          key: v1-mafia-8.4.4-{{ checksum "transformers-either/transformers-either.cabal" }}-{{ checksum "transformers-either/transformers-either.cabal" }}
-
-  deploy:
+      - image: quay.io/haskell_works/ghc-8.6.5:ubuntu-16.04
+  ghc-8_8_3_old:
     docker:
-      - image: tmcgilchrist/ci-haskell:ubuntu_xenial-8.4.4_2.0-20190211034224-5fc74b0
-    steps:
-      - checkout
-
-      - restore_cache:
-          keys:
-            - v1-mafia-8.4.4-{{ checksum "transformers-either/transformers-either.cabal" }}-{{ checksum "transformers-either/transformers-either.cabal" }}
-            - mafia-work-
-
-      - run:
-          name: Build
-          command: ./bin/ci
-
-      - save_cache:
-          paths:
-            - /root/.cabal
-            - /root/.mafia/
-          key: v1-mafia-8.4.4-{{ checksum "transformers-either/transformers-either.cabal" }}-{{ checksum "transformers-either/transformers-either.cabal" }}
+      - image: quay.io/haskell_works/ghc-8.8.3:ubuntu-16.04
 
 workflows:
-  version: 2
-  build:
+  multiple-ghc-build:
     jobs:
-      - build-8.4.4_2.0
-      - deploy:
+      - haskell/build-with-cci-cache:
+          name: GHC 8.2.2
+          executor: haskell/ghc-8_2_2
+          context: haskell-ci
+          cabal-test-extra: --test-show-details=direct
+
+      - haskell/build-with-cci-cache:
+          name: GHC 8.4.4
+          executor: haskell/ghc-8_4_4
+          context: haskell-ci
+          cabal-test-extra: --test-show-details=direct
+
+      - haskell/build-with-cci-cache:
+          name: GHC 8.6.5
+          executor: haskell/ghc-8_6_5
+          context: haskell-ci
+          cabal-test-extra: --test-show-details=direct
+
+      - haskell/build-with-cci-cache:
+          name: GHC 8.8.3
+          executor: haskell/ghc-8_8_3
+          context: haskell-ci
+          cabal-test-extra: --test-show-details=direct
+
+      - github/release-cabal:
+          context: haskell-ci
+          name: GitHub Release
+          attach-workspace: true
           requires:
-            - build-8.4.4_2.0
+            - GHC 8.2.2
+            - GHC 8.4.4
+            - GHC 8.6.5
+            - GHC 8.8.3
+          checkout: true
           filters:
             branches:
               only: master
+
+      # - hackage/upload:
+      #     context: haskell-ci
+      #     publish: true
+      #     requires:
+      #       - GitHub Release
