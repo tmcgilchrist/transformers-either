@@ -3,17 +3,11 @@ module Control.Monad.Trans.Except.Exit (
   , orDieWithCode
   ) where
 
-import           Control.Applicative (pure)
-import           Control.Monad ((>>=), (>>))
-
-import           Data.Either (either)
-import           Data.Function ((.))
-import           Data.Int (Int)
 import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           System.Exit (ExitCode(..), exitWith)
-import           System.IO (IO, stderr, hPutStrLn)
+import           System.IO (stderr, hPutStrLn)
 
 import           Control.Monad.Trans.Except (ExceptT, runExceptT)
 
