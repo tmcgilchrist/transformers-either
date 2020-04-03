@@ -47,6 +47,7 @@ workflows:
           name: GitHub Release
           attach-workspace: true
           context: haskell-ci
+          lockstep-versions: true
           requires:
             - GHC 8.2.2
             - GHC 8.4.4
