@@ -39,14 +39,14 @@ workflows:
           cabal-test-extra: --test-show-details=direct
 
       - haskell/build-with-cci-cache:
-          name: GHC 8.8.3
-          executor: haskell/ghc-8_8_3
+          name: GHC 8.8.4
+          executor: haskell/ghc-8_8_4
           context: haskell-ci
           cabal-test-extra: --test-show-details=direct
 
       - haskell/build-with-cci-cache:
-          name: GHC 8.10.1
-          executor: haskell/ghc-8_10_1
+          name: GHC 8.10.3
+          executor: haskell/ghc-8_10_3
           context: haskell-ci
           cabal-test-extra: --test-show-details=direct
 
@@ -55,8 +55,8 @@ workflows:
           requires:
             - GHC 8.4.4
             - GHC 8.6.5
-            - GHC 8.8.3
-            - GHC 8.10.1
+            - GHC 8.8.4
+            - GHC 8.10.3
 
       - github/release-cabal:
           name: GitHub Release
