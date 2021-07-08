@@ -42,6 +42,8 @@ module Control.Monad.Trans.Except.Extra (
 
   , bracketExceptT
   , bracketExceptionT
+
+  , hushM
   ) where
 
 import           Control.Exception (Exception, IOException, SomeException)
@@ -53,7 +55,7 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except
 
-import           Data.Maybe (Maybe, maybe)
+import           Data.Maybe (Maybe(..), maybe)
 import           Data.Either (Either(..), either)
 import           Data.Foldable (Foldable, foldr)
 import           Data.Function (($), (.), const, id, flip)
@@ -282,3 +284,11 @@ bracketF a f g =
         z <- f a'
         return $ either id (const b) z
 {-# INLINE bracketF #-}
+
+-- | Convert an Either to a Maybe and execute the supplied handler
+-- in the Left case.
+hushM :: Monad m => Either e a -> (e -> m ()) -> m (Maybe a)
+hushM r f = case r of
+  Right a -> return (Just a)
+  Left e -> f e >> return Nothing
+{-# INLINE hushM #-}
