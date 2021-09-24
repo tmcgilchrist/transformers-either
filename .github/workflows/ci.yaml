@@ -9,11 +9,15 @@ on:
       - synchronize
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         cabal: ["3.4"]
-        ghc:  ["8.0.2", "8.2.2", "8.4.4", "8.6.5", "8.8.4", "8.10.5"]
+        ghc: ["8.0.2", "8.2.2", "8.4.4", "8.6.5", "8.8.4", "8.10.7", "9.0.1"]
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
       - uses: haskell/actions/setup@v1
