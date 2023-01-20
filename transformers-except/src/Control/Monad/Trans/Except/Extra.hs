@@ -1,5 +1,4 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
@@ -44,22 +43,24 @@ module Control.Monad.Trans.Except.Extra (
   , bracketExceptionT
 
   , hushM
+  , onLeft
+  , onNothing
   ) where
 
 import           Control.Exception (Exception, IOException, SomeException)
 import qualified Control.Exception as Exception
-import           Control.Monad (Monad(..), (=<<))
+import           Control.Monad (Monad (..), (=<<))
 import           Control.Monad.Catch (Handler (..), MonadCatch, MonadMask, catchAll, mask, throwM)
 import qualified Control.Monad.Catch as Catch
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except
 
-import           Data.Maybe (Maybe(..), maybe)
-import           Data.Either (Either(..), either)
+import           Data.Either (Either (..), either)
 import           Data.Foldable (Foldable, foldr)
-import           Data.Function (($), (.), const, id, flip)
-import           Data.Functor (Functor(..))
+import           Data.Function (const, flip, id, ($), (.))
+import           Data.Functor (Functor (..))
+import           Data.Maybe (Maybe (..), maybe)
 
 import           System.IO (IO)
 
@@ -292,3 +293,13 @@ hushM r f = case r of
   Right a -> return (Just a)
   Left e -> f e >> return Nothing
 {-# INLINE hushM #-}
+
+-- | Handle the Left constructor in returned Either.
+onLeft :: forall e x m a. Monad m => (e -> ExceptT x m a) -> ExceptT x m (Either e a) -> ExceptT x m a
+onLeft h f = f >>= either h return
+{-# INLINE onLeft #-}
+
+-- | Handle the Nothing constructor in returned Maybe.
+onNothing :: forall x m a. Monad m => ExceptT x m a -> ExceptT x m (Maybe a) -> ExceptT x m a
+onNothing h f = f >>= maybe h return
+{-# INLINE onNothing #-}

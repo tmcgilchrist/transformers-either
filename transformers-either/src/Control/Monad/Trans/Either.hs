@@ -44,22 +44,26 @@ module Control.Monad.Trans.Either (
 
   , bracketEitherT
   , bracketExceptionT
+
+  , hushM
+  , onLeft
+  , onNothing
   ) where
 
 import           Control.Exception (Exception, IOException, SomeException)
 import qualified Control.Exception as Exception
-import           Control.Monad (Monad(..), (=<<))
+import           Control.Monad (Monad (..), (=<<))
 import           Control.Monad.Catch (Handler (..), MonadCatch, MonadMask, catchAll, mask, throwM)
 import qualified Control.Monad.Catch as Catch
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.Except (ExceptT(..))
+import           Control.Monad.Trans.Except (ExceptT (..))
 
-import           Data.Maybe (Maybe, maybe)
-import           Data.Either (Either(..), either)
+import           Data.Either (Either (..), either)
 import           Data.Foldable (Foldable, foldr)
-import           Data.Function (($), (.), const, id, flip)
-import           Data.Functor (Functor(..))
+import           Data.Function (const, flip, id, ($), (.))
+import           Data.Functor (Functor (..))
+import           Data.Maybe (Maybe (..), maybe)
 
 import           System.IO (IO)
 
@@ -302,3 +306,21 @@ bracketF a f g =
         z <- f a'
         return $ either id (const b) z
 {-# INLINE bracketF #-}
+
+-- | Convert an Either to a Maybe and execute the supplied handler
+-- in the Left case.
+hushM :: Monad m => Either e a -> (e -> m ()) -> m (Maybe a)
+hushM r f = case r of
+  Right a -> return (Just a)
+  Left e -> f e >> return Nothing
+{-# INLINE hushM #-}
+
+-- | Handle the Left constructor in returned Either.
+onLeft :: forall e x m a. Monad m => (e -> ExceptT x m a) -> EitherT x m (Either e a) -> EitherT x m a
+onLeft h f = f >>= either h return
+{-# INLINE onLeft #-}
+
+-- | Handle the Nothing constructor in returned Maybe.
+onNothing :: forall x m a. Monad m => EitherT x m a -> EitherT x m (Maybe a) -> EitherT x m a
+onNothing h f = f >>= maybe h return
+{-# INLINE onNothing #-}
