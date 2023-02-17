@@ -10,7 +10,7 @@ synopsis:      An Except monad transformer with
 category:      System
 build-type:    Simple
 tested-with:
-  GHC ==8.0.2 || ==8.2.2 || ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.5
+  GHC ==8.0.2 || ==8.2.2 || ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.5 || ==9.4.4
 
 description:   Extra pieces for working with Except
 homepage:      http://github.com/tmcgilchrist/transformers-either/
@@ -24,7 +24,7 @@ library
   build-depends:
     , base          >=4.8 && <5
     , exceptions    >=0.6 && <0.11
-    , text          ^>=1.2
+    , text          >= 1.2 && <2.1
     , transformers  >=0.4 && <0.7
 
   ghc-options:      -Wall
