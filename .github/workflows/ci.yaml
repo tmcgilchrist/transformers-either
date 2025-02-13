@@ -11,12 +11,22 @@ jobs:
   build:
     strategy:
       matrix:
-        cabal: ["3.10"]
-        ghc: ["8.0.2", "8.2.2", "8.4.4", "8.6.5", "8.8.4", "8.10.7", "9.0.2", "9.2.5", "9.4.4", "9.6.3", "9.8.4", "9.10.1", "9.12.1"]
-        os:
-          - macos-latest
-          - ubuntu-latest
-          - windows-latest
+        include:
+          - cabal: "3.12"
+            ghc: "9.12.1"
+            os: ubuntu-latest
+          - cabal: "3.12"
+            ghc: "9.10.1"
+            os: ubuntu-latest
+          - cabal: "3.4"
+            ghc: "9.0.2"
+            os: ubuntu-latest
+          - cabal: "3.2"
+            ghc: "8.10.7"
+            os: ubuntu-latest
+          - cabal: "3.2"
+            ghc: "8.8.4"
+            os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
