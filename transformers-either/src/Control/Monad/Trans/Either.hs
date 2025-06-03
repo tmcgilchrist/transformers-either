@@ -316,11 +316,11 @@ hushM r f = case r of
 {-# INLINE hushM #-}
 
 -- | Handle the Left constructor in returned Either.
-onLeft :: forall e x m a. Monad m => (e -> ExceptT x m a) -> EitherT x m (Either e a) -> EitherT x m a
+onLeft :: Monad m => (a -> m b) -> m (Either a b) -> m b
 onLeft h f = f >>= either h return
 {-# INLINE onLeft #-}
 
 -- | Handle the Nothing constructor in returned Maybe.
-onNothing :: forall x m a. Monad m => EitherT x m a -> EitherT x m (Maybe a) -> EitherT x m a
+onNothing :: Monad m => m b -> m (Maybe b) -> m b
 onNothing h f = f >>= maybe h return
 {-# INLINE onNothing #-}
