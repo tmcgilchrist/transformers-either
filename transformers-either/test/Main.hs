@@ -20,6 +20,7 @@ main = do
 tests :: Group
 tests = Group "Control.Monad.Trans.Either"
   [ ("prop_constructors", prop_constructors)
+  , ("prop_handleLeftT", prop_handleLeftT)
   ]
 
 ------------------------------------------------------------------------
@@ -51,3 +52,15 @@ prop_constructors = property $ do
   r2 === Right a
   r3 === ea
   r4 === maybe (Left e) Right ma
+
+-- | handleLeftT only invokes the handler on Left, and catchLeftT is its flip.
+prop_handleLeftT :: Property
+prop_handleLeftT = property $ do
+  ea <- forAll genEither
+  hr <- forAll genEither
+  let handler e = hoistEither (fmap (+ length e) hr) :: EitherT String IO Int
+      expected = either (\e -> fmap (+ length e) hr) Right ea
+  r1 <- evalIO $ runEitherT (handleLeftT handler (hoistEither ea))
+  r2 <- evalIO $ runEitherT (catchLeftT (hoistEither ea) handler)
+  r1 === expected
+  r2 === expected
