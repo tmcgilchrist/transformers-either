@@ -46,6 +46,7 @@ tests = Group "Control.Monad.Trans.Either"
   , ("prop_hushM_onLeft_onNothing", prop_hushM_onLeft_onNothing)
   , ("prop_orDieWithCode", prop_orDieWithCode)
   , ("prop_bracketExceptionT_async", prop_bracketExceptionT_async)
+  , ("prop_bracketExceptionT_acquire_fails", prop_bracketExceptionT_acquire_fails)
   ]
 
 ------------------------------------------------------------------------
@@ -352,3 +353,36 @@ prop_bracketExceptionT_async = withTests 20 . property $ do
     takeMVar done
     readIORef ref
   n === 1
+
+-- | How acquire can fail.
+data AcquireFailure
+  = AcquireLeft String
+  | AcquireThrow
+  | AcquireAbort
+  deriving (Eq, Show)
+
+-- | When acquire fails in any way, release does not run, the body does not
+-- run, and the failure propagates unchanged.
+prop_bracketExceptionT_acquire_fails :: Property
+prop_bracketExceptionT_acquire_fails = property $ do
+  failure' <- forAll $ Gen.choice
+    [AcquireLeft <$> genErr, pure AcquireThrow, pure AcquireAbort]
+  rel <- forAll (Gen.either genErr (pure ()))
+  relRef <- evalIO (newIORef (0 :: Int))
+  bodyRef <- evalIO (newIORef (0 :: Int))
+  let acquire = case failure' of
+        AcquireLeft e -> left e
+        AcquireThrow -> liftIO (throwIO DivideByZero)
+        AcquireAbort -> lift (MaybeT (return Nothing))
+        :: EitherT String (MaybeT IO) ()
+      body _ = liftIO (modifyIORef bodyRef (+ 1)) >> right (1 :: Int)
+  r <- evalIO . try . runMaybeT . runEitherT $
+    bracketExceptionT acquire (countingRelease relRef rel) body
+  nRel <- evalIO (readIORef relRef)
+  nBody <- evalIO (readIORef bodyRef)
+  nRel === 0
+  nBody === 0
+  case failure' of
+    AcquireLeft e -> r === Right (Just (Left e))
+    AcquireThrow -> r === Left DivideByZero
+    AcquireAbort -> r === Right Nothing
