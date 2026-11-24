@@ -5,8 +5,11 @@ module Main (main) where
 import           Control.Exception (ArithException (..), SomeException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Except.Extra
+
+import           Data.IORef (IORef, modifyIORef, newIORef, readIORef)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -26,6 +29,7 @@ tests = Group "Control.Monad.Trans.Except.Extra"
   [ ("prop_constructors", prop_constructors)
   , ("prop_handleLeftT", prop_handleLeftT)
   , ("prop_handlesExceptT", prop_handlesExceptT)
+  , ("prop_bracketExceptT", prop_bracketExceptT)
   ]
 
 ------------------------------------------------------------------------
@@ -74,6 +78,18 @@ matches h o = case (h, o) of
   (HArith, _) -> False
   (HSome, _) -> True
 
+-- | A release action that counts how often it runs, then produces the given
+-- result.
+countingRelease :: IORef Int -> Either String () -> a -> ExceptT String IO ()
+countingRelease ref result _ = do
+  liftIO (modifyIORef ref (+ 1))
+  hoistEither result
+
+-- | Expected result of a bracket whose acquire succeeded: an error from
+-- release takes precedence over the body's result.
+expectedBracket :: Either String () -> Either String Int -> Either String Int
+expectedBracket rel body = either Left (const body) rel
+
 ------------------------------------------------------------------------
 -- Properties
 
@@ -120,3 +136,22 @@ prop_handlesExceptT = property $ do
   case r of
     Right v -> Just v === expected
     Left (_ :: SomeException) -> Nothing === expected
+
+-- | bracketExceptT releases exactly once iff acquire succeeded, whatever the
+-- body returns.
+prop_bracketExceptT :: Property
+prop_bracketExceptT = property $ do
+  acq <- forAll (Gen.either genErr (pure ()))
+  body <- forAll genEither
+  rel <- forAll (Gen.either genErr (pure ()))
+  ref <- evalIO (newIORef 0)
+  r <- evalIO $ runExceptT
+    (bracketExceptT (hoistEither acq) (countingRelease ref rel) (\_ -> hoistEither body))
+  n <- evalIO (readIORef ref)
+  case acq of
+    Left e -> do
+      r === Left e
+      n === 0
+    Right () -> do
+      r === expectedBracket rel body
+      n === 1
