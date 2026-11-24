@@ -5,7 +5,10 @@ module Main (main) where
 import           Control.Exception (ArithException (..), SomeException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.Either
+
+import           Data.IORef (IORef, modifyIORef, newIORef, readIORef)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -25,6 +28,7 @@ tests = Group "Control.Monad.Trans.Either"
   [ ("prop_constructors", prop_constructors)
   , ("prop_handleLeftT", prop_handleLeftT)
   , ("prop_handlesEitherT", prop_handlesEitherT)
+  , ("prop_bracketEitherT", prop_bracketEitherT)
   ]
 
 ------------------------------------------------------------------------
@@ -73,6 +77,18 @@ matches h o = case (h, o) of
   (HArith, _) -> False
   (HSome, _) -> True
 
+-- | A release action that counts how often it runs, then produces the given
+-- result.
+countingRelease :: IORef Int -> Either String () -> a -> EitherT String IO ()
+countingRelease ref result _ = do
+  liftIO (modifyIORef ref (+ 1))
+  hoistEither result
+
+-- | Expected result of a bracket whose acquire succeeded: an error from
+-- release takes precedence over the body's result.
+expectedBracket :: Either String () -> Either String Int -> Either String Int
+expectedBracket rel body = either Left (const body) rel
+
 ------------------------------------------------------------------------
 -- Properties
 
@@ -119,3 +135,22 @@ prop_handlesEitherT = property $ do
   case r of
     Right v -> Just v === expected
     Left (_ :: SomeException) -> Nothing === expected
+
+-- | bracketEitherT releases exactly once iff acquire succeeded, whatever the
+-- body returns.
+prop_bracketEitherT :: Property
+prop_bracketEitherT = property $ do
+  acq <- forAll (Gen.either genErr (pure ()))
+  body <- forAll genEither
+  rel <- forAll (Gen.either genErr (pure ()))
+  ref <- evalIO (newIORef 0)
+  r <- evalIO $ runEitherT
+    (bracketEitherT (hoistEither acq) (countingRelease ref rel) (\_ -> hoistEither body))
+  n <- evalIO (readIORef ref)
+  case acq of
+    Left e -> do
+      r === Left e
+      n === 0
+    Right () -> do
+      r === expectedBracket rel body
+      n === 1
