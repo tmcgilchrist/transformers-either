@@ -5,7 +5,9 @@ module Main (main) where
 import           Control.Exception (ArithException (..), SomeException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Maybe (MaybeT (..))
 import           Control.Monad.Trans.Either
 
 import           Data.IORef (IORef, modifyIORef, newIORef, readIORef)
@@ -30,6 +32,7 @@ tests = Group "Control.Monad.Trans.Either"
   , ("prop_handlesEitherT", prop_handlesEitherT)
   , ("prop_bracketEitherT", prop_bracketEitherT)
   , ("prop_bracketExceptionT", prop_bracketExceptionT)
+  , ("prop_bracketExceptionT_base_short_circuit", prop_bracketExceptionT_base_short_circuit)
   ]
 
 ------------------------------------------------------------------------
@@ -80,7 +83,7 @@ matches h o = case (h, o) of
 
 -- | A release action that counts how often it runs, then produces the given
 -- result.
-countingRelease :: IORef Int -> Either String () -> a -> EitherT String IO ()
+countingRelease :: MonadIO m => IORef Int -> Either String () -> a -> EitherT String m ()
 countingRelease ref result _ = do
   liftIO (modifyIORef ref (+ 1))
   hoistEither result
@@ -191,3 +194,19 @@ prop_bracketExceptionT = property $ do
       case body of
         BodyThrow -> r === Left DivideByZero
         BodyEither ea -> r === Right (expectedBracket rel ea)
+
+-- | bracketExceptionT documents that it cleans up "regardless of 'left' or
+-- exception". That must include the base monad short-circuiting (here
+-- MaybeT returning Nothing).
+prop_bracketExceptionT_base_short_circuit :: Property
+prop_bracketExceptionT_base_short_circuit = property $ do
+  body <- forAll (Gen.maybe genEither)
+  rel <- forAll (Gen.either genErr (pure ()))
+  ref <- evalIO (newIORef 0)
+  let run = maybe (lift (MaybeT (return Nothing))) hoistEither body
+             :: EitherT String (MaybeT IO) Int
+  r <- evalIO . runMaybeT $ runEitherT
+    (bracketExceptionT (right ()) (countingRelease ref rel) (\_ -> run))
+  n <- evalIO (readIORef ref)
+  n === 1
+  r === fmap (expectedBracket rel) body
