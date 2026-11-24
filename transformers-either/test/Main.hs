@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
-import           Control.Exception (ArithException (..), IOException, SomeException, throwIO, try)
+import           Control.Exception (ArithException (..), IOException, SomeException, bracket, fromException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -10,15 +10,20 @@ import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Maybe (MaybeT (..))
 import           Data.Functor.Identity (Identity (..))
 import           Control.Monad.Trans.Either
+import           Control.Monad.Trans.Either.Exit (orDieWithCode)
 
 import           Data.IORef (IORef, modifyIORef, newIORef, readIORef)
+import qualified Data.Text as T
+
+import           GHC.IO.Handle (hDuplicate, hDuplicateTo)
 
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
-import           System.Exit (exitFailure)
-import           System.IO (BufferMode (..), hSetBuffering, stdout)
+import           System.Directory (getTemporaryDirectory, removeFile)
+import           System.Exit (ExitCode (..), exitFailure)
+import           System.IO (BufferMode (..), hClose, hSetBuffering, openTempFile, stderr, stdout)
 
 main :: IO ()
 main = do
@@ -37,6 +42,7 @@ tests = Group "Control.Monad.Trans.Either"
   , ("prop_mapping", prop_mapping)
   , ("prop_handleEitherT", prop_handleEitherT)
   , ("prop_hushM_onLeft_onNothing", prop_hushM_onLeft_onNothing)
+  , ("prop_orDieWithCode", prop_orDieWithCode)
   ]
 
 ------------------------------------------------------------------------
@@ -110,6 +116,29 @@ runBody :: BodyOutcome -> EitherT String IO Int
 runBody b = case b of
   BodyEither ea -> hoistEither ea
   BodyThrow -> liftIO (throwIO DivideByZero)
+
+-- | Exit codes, biased towards 0 and the boundaries where the low 8 bits wrap.
+genExitCode :: Gen Int
+genExitCode = Gen.frequency
+  [ (3, Gen.int (Range.linearFrom 1 (-1000) 1000))
+  , (1, Gen.element [-256, -1, 0, 1, 255, 256, 257, 512])
+  ]
+
+-- | Run an action with stderr redirected to a temporary file.
+silenceStderr :: IO a -> IO a
+silenceStderr action = do
+  tmp <- getTemporaryDirectory
+  bracket
+    (do (path, h) <- openTempFile tmp "stderr.txt"
+        old <- hDuplicate stderr
+        hDuplicateTo h stderr
+        return (path, h, old))
+    (\(path, h, old) -> do
+        hDuplicateTo old stderr
+        hClose old
+        hClose h
+        removeFile path)
+    (const action)
 
 ------------------------------------------------------------------------
 -- Properties
@@ -276,3 +305,28 @@ prop_hushM_onLeft_onNothing = property $ do
   r3 === maybe 0 id ma
   -- hushM and onLeft each bump once on Left; onNothing bumps once on Nothing.
   n === 2 * either (const 1) (const 0) ea + maybe 1 (const 0) ma
+
+-- | orDieWithCode returns the value on Right. On Left it terminates with
+-- ExitFailure code. (ExitFailure 0 is invalid, so code 0 makes exitWith throw
+-- an IOError instead, which still terminates the process with a failure.
+-- GHC's top-level handler also maps codes whose low 8 bits are 0 to 255, so
+-- the process never reports success.)
+prop_orDieWithCode :: Property
+prop_orDieWithCode = property $ do
+  code <- forAll genExitCode
+  ea <- forAll genEither
+  r <- evalIO . silenceStderr . try $
+    orDieWithCode code T.pack (hoistEither ea)
+  case (ea, r) of
+    (Right a, Right b) ->
+      b === a
+    (Left _, Left (ex :: SomeException)) -> do
+      annotateShow ex
+      case fromException ex of
+        Just (ExitFailure c) ->
+          c === code
+        _ ->
+          code === 0
+    _ -> do
+      annotateShow (fmap (const ()) r)
+      failure
