@@ -36,6 +36,7 @@ tests = Group "Control.Monad.Trans.Either"
   , ("prop_bracketExceptionT_base_short_circuit", prop_bracketExceptionT_base_short_circuit)
   , ("prop_mapping", prop_mapping)
   , ("prop_handleEitherT", prop_handleEitherT)
+  , ("prop_hushM_onLeft_onNothing", prop_hushM_onLeft_onNothing)
   ]
 
 ------------------------------------------------------------------------
@@ -164,7 +165,7 @@ prop_bracketEitherT = property $ do
   acq <- forAll (Gen.either genErr (pure ()))
   body <- forAll genEither
   rel <- forAll (Gen.either genErr (pure ()))
-  ref <- evalIO (newIORef 0)
+  ref <- evalIO (newIORef (0 :: Int))
   r <- evalIO $ runEitherT
     (bracketEitherT (hoistEither acq) (countingRelease ref rel) (\_ -> hoistEither body))
   n <- evalIO (readIORef ref)
@@ -184,7 +185,7 @@ prop_bracketExceptionT = property $ do
   acq <- forAll (Gen.either genErr (pure ()))
   body <- forAll genBodyOutcome
   rel <- forAll (Gen.either genErr (pure ()))
-  ref <- evalIO (newIORef 0)
+  ref <- evalIO (newIORef (0 :: Int))
   r <- evalIO . try $ runEitherT
     (bracketExceptionT (hoistEither acq) (countingRelease ref rel) (\_ -> runBody body))
   n <- evalIO (readIORef ref)
@@ -205,7 +206,7 @@ prop_bracketExceptionT_base_short_circuit :: Property
 prop_bracketExceptionT_base_short_circuit = property $ do
   body <- forAll (Gen.maybe genEither)
   rel <- forAll (Gen.either genErr (pure ()))
-  ref <- evalIO (newIORef 0)
+  ref <- evalIO (newIORef (0 :: Int))
   let run = maybe (lift (MaybeT (return Nothing))) hoistEither body
              :: EitherT String (MaybeT IO) Int
   r <- evalIO . runMaybeT $ runEitherT
@@ -257,3 +258,21 @@ prop_handleEitherT = property $ do
   toMaybe r2 === expectIO
   toMaybe r3 === expectArith
   toMaybe r4 === expectArith
+
+-- | hushM, onLeft and onNothing run their handler exactly when the value is
+-- Left / Nothing, and pass Right / Just values through.
+prop_hushM_onLeft_onNothing :: Property
+prop_hushM_onLeft_onNothing = property $ do
+  ea <- forAll genEither
+  ma <- forAll (Gen.maybe genInt)
+  ref <- evalIO (newIORef (0 :: Int))
+  let bump = modifyIORef ref (+ 1)
+  r1 <- evalIO $ hushM ea (const bump)
+  r2 <- evalIO $ onLeft (\e -> bump >> return (length e)) (return ea)
+  r3 <- evalIO $ onNothing (bump >> return 0) (return ma)
+  n <- evalIO (readIORef ref)
+  r1 === either (const Nothing) Just ea
+  r2 === either length id ea
+  r3 === maybe 0 id ma
+  -- hushM and onLeft each bump once on Left; onNothing bumps once on Nothing.
+  n === 2 * either (const 1) (const 0) ea + maybe 1 (const 0) ma
