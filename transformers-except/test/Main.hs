@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
-import           Control.Exception (ArithException (..), SomeException, throwIO, try)
+import           Control.Exception (ArithException (..), IOException, SomeException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -36,6 +36,7 @@ tests = Group "Control.Monad.Trans.Except.Extra"
   , ("prop_bracketExceptionT", prop_bracketExceptionT)
   , ("prop_bracketExceptionT_base_short_circuit", prop_bracketExceptionT_base_short_circuit)
   , ("prop_mapping", prop_mapping)
+  , ("prop_handleExceptT", prop_handleExceptT)
   ]
 
 ------------------------------------------------------------------------
@@ -230,3 +231,30 @@ prop_mapping = property $ do
   runIdentity (exceptT (return . length) (return . g) m) === either length g ea
   r <- evalIO $ runExceptT (hoistExceptT (return . runIdentity) m)
   r === ea
+
+-- | handleIOExceptT and handleExceptT catch exactly the requested exception
+-- type and let everything else escape. The catch variants are their flips.
+prop_handleExceptT :: Property
+prop_handleExceptT = property $ do
+  outcome <- forAll genOutcome
+  let action = runOutcome outcome
+      expectIO = case outcome of
+        Return n -> Just (Right n)
+        ThrowIO -> Just (Left "io")
+        ThrowArith -> Nothing
+      expectArith = case outcome of
+        Return n -> Just (Right n)
+        ThrowArith -> Just (Left "arith")
+        ThrowIO -> Nothing
+      wrapIO = const "io" :: IOException -> String
+      wrapArith = const "arith" :: ArithException -> String
+      toMaybe :: Either SomeException a -> Maybe a
+      toMaybe = either (const Nothing) Just
+  r1 <- evalIO . try $ runExceptT (handleIOExceptT wrapIO action :: ExceptT String IO Int)
+  r2 <- evalIO . try $ runExceptT (catchIOExceptT action wrapIO :: ExceptT String IO Int)
+  r3 <- evalIO . try $ runExceptT (handleExceptT wrapArith action)
+  r4 <- evalIO . try $ runExceptT (catchExceptT action wrapArith)
+  toMaybe r1 === expectIO
+  toMaybe r2 === expectIO
+  toMaybe r3 === expectArith
+  toMaybe r4 === expectArith

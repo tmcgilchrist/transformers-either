@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
-import           Control.Exception (ArithException (..), SomeException, throwIO, try)
+import           Control.Exception (ArithException (..), IOException, SomeException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -35,6 +35,7 @@ tests = Group "Control.Monad.Trans.Either"
   , ("prop_bracketExceptionT", prop_bracketExceptionT)
   , ("prop_bracketExceptionT_base_short_circuit", prop_bracketExceptionT_base_short_circuit)
   , ("prop_mapping", prop_mapping)
+  , ("prop_handleEitherT", prop_handleEitherT)
   ]
 
 ------------------------------------------------------------------------
@@ -229,3 +230,30 @@ prop_mapping = property $ do
   runIdentity (eitherT (return . length) (return . g) m) === either length g ea
   r <- evalIO $ runEitherT (hoistEitherT (return . runIdentity) m)
   r === ea
+
+-- | handleIOEitherT and handleEitherT catch exactly the requested exception
+-- type and let everything else escape. The catch variants are their flips.
+prop_handleEitherT :: Property
+prop_handleEitherT = property $ do
+  outcome <- forAll genOutcome
+  let action = runOutcome outcome
+      expectIO = case outcome of
+        Return n -> Just (Right n)
+        ThrowIO -> Just (Left "io")
+        ThrowArith -> Nothing
+      expectArith = case outcome of
+        Return n -> Just (Right n)
+        ThrowArith -> Just (Left "arith")
+        ThrowIO -> Nothing
+      wrapIO = const "io" :: IOException -> String
+      wrapArith = const "arith" :: ArithException -> String
+      toMaybe :: Either SomeException a -> Maybe a
+      toMaybe = either (const Nothing) Just
+  r1 <- evalIO . try $ runEitherT (handleIOEitherT wrapIO action :: EitherT String IO Int)
+  r2 <- evalIO . try $ runEitherT (catchIOEitherT action wrapIO :: EitherT String IO Int)
+  r3 <- evalIO . try $ runEitherT (handleEitherT wrapArith action)
+  r4 <- evalIO . try $ runEitherT (catchEitherT action wrapArith)
+  toMaybe r1 === expectIO
+  toMaybe r2 === expectIO
+  toMaybe r3 === expectArith
+  toMaybe r4 === expectArith
