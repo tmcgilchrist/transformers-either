@@ -44,7 +44,7 @@ test-suite test
     , base
     , directory
     , exceptions
-    , hedgehog      >=1.0 && <1.7
+    , hedgehog      >=1.0 && <1.8
     , text
     , transformers
     , transformers-except
