@@ -53,7 +53,7 @@ module Control.Monad.Trans.Either (
 import           Control.Exception (Exception, IOException)
 import qualified Control.Exception as Exception
 import           Control.Monad (Monad (..), (=<<))
-import           Control.Monad.Catch (Handler (..), MonadCatch, MonadMask, catchAll, mask, throwM)
+import           Control.Monad.Catch (Handler (..), MonadCatch, MonadMask)
 import qualified Control.Monad.Catch as Catch
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
@@ -285,15 +285,13 @@ bracketExceptionT acquire release run =
 --  - Right indicates that the finalizer has a value level success, and its results can be ignored.
 --
 -- If the bracketed action throws, the finalizer is run and the exception is
--- always rethrown, whatever the finalizer returns.
+-- always rethrown, whatever the finalizer returns. If the base monad
+-- short-circuits (e.g. 'Nothing' in 'MaybeT'), the finalizer is still run.
 --
 bracketF :: MonadMask m => m a -> (a -> m (Either b c)) -> (a -> m b) -> m b
-bracketF a f g =
-  mask $ \restore -> do
-    a' <- a
-    b <- restore (g a') `catchAll` (\ex -> f a' >> throwM ex)
-    z <- f a'
-    return $ either id (const b) z
+bracketF a f g = do
+  (b, z) <- Catch.generalBracket a (\a' _ -> f a') g
+  return $ either id (const b) z
 {-# INLINE bracketF #-}
 
 -- | Convert an Either to a Maybe and execute the supplied handler
