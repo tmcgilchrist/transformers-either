@@ -48,6 +48,7 @@ tests = Group "Control.Monad.Trans.Except.Extra"
   , ("prop_orDieWithCode", prop_orDieWithCode)
   , ("prop_bracketExceptionT_async", prop_bracketExceptionT_async)
   , ("prop_bracketExceptionT_acquire_fails", prop_bracketExceptionT_acquire_fails)
+  , ("prop_bracketExceptionT_release_throws", prop_bracketExceptionT_release_throws)
   ]
 
 ------------------------------------------------------------------------
@@ -387,3 +388,21 @@ prop_bracketExceptionT_acquire_fails = property $ do
     AcquireLeft e -> r === Right (Just (Left e))
     AcquireThrow -> r === Left DivideByZero
     AcquireAbort -> r === Right Nothing
+
+-- | If release throws, it runs exactly once and its exception escapes,
+-- whatever the body did (the same as Control.Exception.bracket).
+prop_bracketExceptionT_release_throws :: Property
+prop_bracketExceptionT_release_throws = property $ do
+  body <- forAll genBodyOutcome
+  ref <- evalIO (newIORef (0 :: Int))
+  let release _ = liftIO (modifyIORef ref (+ 1) >> throwIO (userError "release"))
+        :: ExceptT String IO ()
+  r <- evalIO . try . runExceptT $
+    bracketExceptionT (right ()) release (\_ -> runBody body)
+  n <- evalIO (readIORef ref)
+  n === 1
+  case r of
+    Left (e :: IOException) -> show e === show (userError "release")
+    Right v -> do
+      annotateShow v
+      failure
