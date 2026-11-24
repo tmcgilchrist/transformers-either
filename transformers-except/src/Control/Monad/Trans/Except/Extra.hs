@@ -47,7 +47,7 @@ module Control.Monad.Trans.Except.Extra (
   , onNothing
   ) where
 
-import           Control.Exception (Exception, IOException, SomeException)
+import           Control.Exception (Exception, IOException)
 import qualified Control.Exception as Exception
 import           Control.Monad (Monad (..), (=<<))
 import           Control.Monad.Catch (Handler (..), MonadCatch, MonadMask, catchAll, mask, throwM)
@@ -257,33 +257,22 @@ bracketExceptionT acquire release run =
         runExceptT (run r'))
 {-# INLINE bracketExceptionT #-}
 
--- This is for internal use only. The 'bracketF' function catches all exceptions
--- so the cleanup function can be called and then rethrow the exception.
-data BracketResult a =
-    BracketOk a
-  | BracketFailedFinalizerOk SomeException
-  | BracketFailedFinalizerError a
-
 -- Bracket where you care about the output of the finalizer. If the finalizer fails
 -- with a value level fail, it will return the result of the finalizer.
 -- Finalizer:
 --  - Left indicates a value level fail.
 --  - Right indicates that the finalizer has a value level success, and its results can be ignored.
 --
+-- If the bracketed action throws, the finalizer is run and the exception is
+-- always rethrown, whatever the finalizer returns.
+--
 bracketF :: MonadMask m => m a -> (a -> m (Either b c)) -> (a -> m b) -> m b
 bracketF a f g =
   mask $ \restore -> do
     a' <- a
-    x <- restore (BracketOk `fmap` g a') `catchAll`
-           (\ex -> either BracketFailedFinalizerError (const $ BracketFailedFinalizerOk ex) `fmap` f a')
-    case x of
-      BracketFailedFinalizerOk ex ->
-        throwM ex
-      BracketFailedFinalizerError b ->
-        return b
-      BracketOk b -> do
-        z <- f a'
-        return $ either id (const b) z
+    b <- restore (g a') `catchAll` (\ex -> f a' >> throwM ex)
+    z <- f a'
+    return $ either id (const b) z
 {-# INLINE bracketF #-}
 
 -- | Convert an Either to a Maybe and execute the supplied handler
