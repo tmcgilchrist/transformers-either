@@ -46,7 +46,9 @@ test-suite test
   ghc-options:      -Wall -threaded
   build-depends:
     , base
+    , directory
     , exceptions
     , hedgehog      >=1.0 && <1.7
+    , text
     , transformers
     , transformers-either
