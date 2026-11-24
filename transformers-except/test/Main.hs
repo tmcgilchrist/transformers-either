@@ -30,6 +30,7 @@ tests = Group "Control.Monad.Trans.Except.Extra"
   , ("prop_handleLeftT", prop_handleLeftT)
   , ("prop_handlesExceptT", prop_handlesExceptT)
   , ("prop_bracketExceptT", prop_bracketExceptT)
+  , ("prop_bracketExceptionT", prop_bracketExceptionT)
   ]
 
 ------------------------------------------------------------------------
@@ -89,6 +90,20 @@ countingRelease ref result _ = do
 -- release takes precedence over the body's result.
 expectedBracket :: Either String () -> Either String Int -> Either String Int
 expectedBracket rel body = either Left (const body) rel
+
+-- | What the body of a bracket does.
+data BodyOutcome
+  = BodyEither (Either String Int)
+  | BodyThrow
+  deriving (Eq, Show)
+
+genBodyOutcome :: Gen BodyOutcome
+genBodyOutcome = Gen.choice [BodyEither <$> genEither, pure BodyThrow]
+
+runBody :: BodyOutcome -> ExceptT String IO Int
+runBody b = case b of
+  BodyEither ea -> hoistEither ea
+  BodyThrow -> liftIO (throwIO DivideByZero)
 
 ------------------------------------------------------------------------
 -- Properties
@@ -155,3 +170,25 @@ prop_bracketExceptT = property $ do
     Right () -> do
       r === expectedBracket rel body
       n === 1
+
+-- | bracketExceptionT releases exactly once iff acquire succeeded, including
+-- when the body throws, and rethrows exceptions from the body (as its Haddock
+-- documents).
+prop_bracketExceptionT :: Property
+prop_bracketExceptionT = property $ do
+  acq <- forAll (Gen.either genErr (pure ()))
+  body <- forAll genBodyOutcome
+  rel <- forAll (Gen.either genErr (pure ()))
+  ref <- evalIO (newIORef 0)
+  r <- evalIO . try $ runExceptT
+    (bracketExceptionT (hoistEither acq) (countingRelease ref rel) (\_ -> runBody body))
+  n <- evalIO (readIORef ref)
+  case acq of
+    Left e -> do
+      r === Right (Left e)
+      n === 0
+    Right () -> do
+      n === 1
+      case body of
+        BodyThrow -> r === Left DivideByZero
+        BodyEither ea -> r === Right (expectedBracket rel ea)
