@@ -8,23 +8,22 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          - cabal: "3.12"
-            ghc: "9.12.1"
-            os: ubuntu-latest
-          - cabal: "3.12"
-            ghc: "9.10.1"
-            os: ubuntu-latest
-          - cabal: "3.4"
-            ghc: "9.0.2"
-            os: ubuntu-latest
-          - cabal: "3.2"
-            ghc: "8.10.7"
-            os: ubuntu-latest
-          - cabal: "3.2"
-            ghc: "8.8.4"
-            os: ubuntu-latest
+        cabal: [ "3.16" ]
+        ghc:
+          - "9.14"
+          - "9.12"
+          - "9.10"
+          - "9.8"
+          - "9.6"
+          - "9.4"
+          - "9.2"
+          - "9.0"
+          - "8.10"
+          - "8.8"
+        os: [ ubuntu-latest ]
+    name: build (ghc ${{ matrix.ghc }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -33,19 +32,25 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
+      - name: Show resolved versions
+        run: |
+          echo "GHC:   ${{ steps.setup-haskell-cabal.outputs.ghc-version }}"
+          echo "Cabal: ${{ steps.setup-haskell-cabal.outputs.cabal-version }}"
       - name: Cabal Update
         run: |
-          cabal v2-update
-          cabal v2-freeze $CONFIG
-      - uses: actions/cache@v4.2.3
+          cabal update
+          cabal freeze
+      - uses: actions/cache@v5
         with:
           path: |
             ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+          key: ${{ runner.os }}-ghc-${{ steps.setup-haskell-cabal.outputs.ghc-version }}-${{ hashFiles('cabal.project.freeze') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.ghc }}-
+            ${{ runner.os }}-ghc-${{ steps.setup-haskell-cabal.outputs.ghc-version }}-
       - name: Build all
-        run: |
-          cabal build all
-          cabal sdist all
+        run: cabal build all
+      - name: Test all
+        run: cabal test all
+      - name: Sdist all
+        run: cabal sdist all
