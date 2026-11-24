@@ -8,6 +8,7 @@ import           Control.Monad.Catch (Handler (..))
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Maybe (MaybeT (..))
+import           Data.Functor.Identity (Identity (..))
 import           Control.Monad.Trans.Either
 
 import           Data.IORef (IORef, modifyIORef, newIORef, readIORef)
@@ -33,6 +34,7 @@ tests = Group "Control.Monad.Trans.Either"
   , ("prop_bracketEitherT", prop_bracketEitherT)
   , ("prop_bracketExceptionT", prop_bracketExceptionT)
   , ("prop_bracketExceptionT_base_short_circuit", prop_bracketExceptionT_base_short_circuit)
+  , ("prop_mapping", prop_mapping)
   ]
 
 ------------------------------------------------------------------------
@@ -210,3 +212,20 @@ prop_bracketExceptionT_base_short_circuit = property $ do
   n <- evalIO (readIORef ref)
   n === 1
   r === fmap (expectedBracket rel) body
+
+-- | The mapping combinators agree with their pure 'Either' counterparts.
+prop_mapping :: Property
+prop_mapping = property $ do
+  ea <- forAll genEither
+  let m = hoistEither ea :: EitherT String Identity Int
+      f = reverse
+      g = (* 2)
+      run = runIdentity . runEitherT
+      bimapE f' g' = either (Left . f') (Right . g')
+  run (bimapEitherT f g m) === bimapE f g ea
+  run (firstEitherT f m) === bimapE f id ea
+  run (secondEitherT g m) === bimapE id g ea
+  run (mapEitherT (fmap (bimapE f g)) m) === bimapE f g ea
+  runIdentity (eitherT (return . length) (return . g) m) === either length g ea
+  r <- evalIO $ runEitherT (hoistEitherT (return . runIdentity) m)
+  r === ea
