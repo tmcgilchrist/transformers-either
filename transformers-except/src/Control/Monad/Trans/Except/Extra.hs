@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Control.Monad.Trans.Except,Extra
+-- Module      :  Control.Monad.Trans.Except.Extra
 -- Copyright   :  (C) 2017 Tim McGilchrist
 -- License     :  BSD-style (see the file LICENSE)
 --
@@ -75,9 +75,8 @@ newExceptT =
   ExceptT
 {-# INLINE newExceptT #-}
 
--- | Map over both arguments at the same time.
---
--- Specialised version of 'bimap' for 'ExceptT'.
+-- | Eliminate an 'ExceptT' by running the first function on a 'Left' value
+-- or the second on a 'Right' value. The monadic version of 'either'.
 exceptT :: Monad m => (x -> m b) -> (a -> m b) -> ExceptT x m a -> m b
 exceptT f g m =
   either f g =<< runExceptT m
@@ -101,7 +100,9 @@ hoistEither =
   ExceptT . return
 {-# INLINE hoistEither #-}
 
--- | Map the unwrapped computation using the given function.
+-- | Map over the 'Left' and 'Right' values at the same time.
+--
+-- Specialised version of 'bimap' for 'ExceptT'.
 bimapExceptT :: Functor m => (x -> y) -> (a -> b) -> ExceptT x m a -> ExceptT y m b
 bimapExceptT f g =
   let
@@ -123,13 +124,13 @@ secondExceptT =
   bimapExceptT id
 {-# INLINE secondExceptT #-}
 
--- | Hoist 'Maybe' a into 'Right' a.
+-- | Hoist 'Maybe' a into 'Right' a, using the given error for 'Nothing'.
 hoistMaybe :: Monad m => x -> Maybe a -> ExceptT x m a
 hoistMaybe x =
   maybe (left x) return
 {-# INLINE hoistMaybe #-}
 
--- | Hoist 'Except' m into an 'Except' n.
+-- | Change the base monad of an 'ExceptT' using a natural transformation.
 hoistExceptT :: (forall b. m b -> n b) -> ExceptT x m a -> ExceptT x n a
 hoistExceptT f =
   ExceptT . f . runExceptT
@@ -210,9 +211,11 @@ catchLeftT = flip handleLeftT
 {-# INLINE catchLeftT #-}
 
 -- | Acquire a resource in 'ExceptT' and then perform an action with
--- it, cleaning up afterwards regardless of 'left'.
+-- it, cleaning up afterwards regardless of 'left'. If the cleanup returns
+-- 'left', its error replaces the result of the action.
 --
--- This function does not clean up in the event of an exception.
+-- This function does not clean up in the event of an exception, or when the
+-- base monad short-circuits (e.g. 'Nothing' in @MaybeT@).
 -- Prefer 'bracketExceptionT' in any impure setting.
 bracketExceptT :: Monad m => ExceptT e m a -> (a -> ExceptT e m b) -> (a -> ExceptT e m c) -> ExceptT e m c
 bracketExceptT before after thing = do
@@ -224,12 +227,15 @@ bracketExceptT before after thing = do
     return r
 {-# INLINE bracketExceptT #-}
 
--- | Acquire a resource in ExceptT and then perform an action with it,
+-- | Acquire a resource in 'ExceptT' and then perform an action with it,
 -- cleaning up afterwards regardless of 'left' or exception.
 --
 -- Like 'bracketExceptT', but the cleanup is called even when the bracketed
--- function throws an exception. Exceptions in the bracketed function are caught
--- to allow the cleanup to run and then rethrown.
+-- function throws an exception or the base monad short-circuits (e.g.
+-- 'Nothing' in @MaybeT@). Exceptions in the bracketed function are caught to
+-- allow the cleanup to run and then rethrown, even if the cleanup returns
+-- 'left'. Otherwise, if the cleanup returns 'left', its error replaces the
+-- result of the action.
 bracketExceptionT ::
      MonadMask m
   => ExceptT e m a
@@ -265,7 +271,7 @@ bracketExceptionT acquire release run =
 --
 -- If the bracketed action throws, the finalizer is run and the exception is
 -- always rethrown, whatever the finalizer returns. If the base monad
--- short-circuits (e.g. 'Nothing' in 'MaybeT'), the finalizer is still run.
+-- short-circuits (e.g. 'Nothing' in @MaybeT@), the finalizer is still run.
 --
 bracketF :: MonadMask m => m a -> (a -> m (Either b c)) -> (a -> m b) -> m b
 bracketF a f g = do
@@ -286,7 +292,7 @@ onLeft :: Monad m => (a -> m b) -> m (Either a b) -> m b
 onLeft h f = f >>= either h return
 {-# INLINE onLeft #-}
 
-onNothing :: Monad m => m b -> m (Maybe b) -> m b
 -- | Handle the Nothing constructor in returned Maybe.
+onNothing :: Monad m => m b -> m (Maybe b) -> m b
 onNothing h f = f >>= maybe h return
 {-# INLINE onNothing #-}

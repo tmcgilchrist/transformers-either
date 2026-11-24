@@ -12,7 +12,7 @@
 -- Portability :  portable
 --
 -- This monad transformer extends "Control.Monad.Trans.Except" with a more
--- familar "Either" naming.
+-- familiar "Either" naming.
 -----------------------------------------------------------------------------
 module Control.Monad.Trans.Either (
   -- * Control.Monad.Trans.Either
@@ -90,9 +90,8 @@ newEitherT =
   ExceptT
 {-# INLINE newEitherT #-}
 
--- | Map over both arguments at the same time.
---
--- Specialised version of 'bimap' for 'EitherT'.
+-- | Eliminate an 'EitherT' by running the first function on a 'Left' value
+-- or the second on a 'Right' value. The monadic version of 'either'.
 eitherT :: Monad m => (x -> m b) -> (a -> m b) -> EitherT x m a -> m b
 eitherT f g m =
   either f g =<< runEitherT m
@@ -110,7 +109,7 @@ right =
   return
 {-# INLINE right #-}
 
--- |
+-- | Map the unwrapped computation using the given function.
 mapEitherT :: (m (Either x a) -> n (Either y b)) -> EitherT x m a -> EitherT y n b
 mapEitherT f =
   EitherT . f . runEitherT
@@ -122,7 +121,9 @@ hoistEither =
   EitherT . return
 {-# INLINE hoistEither #-}
 
--- | Map the unwrapped computation using the given function.
+-- | Map over the 'Left' and 'Right' values at the same time.
+--
+-- Specialised version of 'bimap' for 'EitherT'.
 bimapEitherT :: Functor m => (x -> y) -> (a -> b) -> EitherT x m a -> EitherT y m b
 bimapEitherT f g =
   let
@@ -144,13 +145,13 @@ secondEitherT =
   bimapEitherT id
 {-# INLINE secondEitherT #-}
 
--- | Hoist 'Maybe' a into 'Right' a.
+-- | Hoist 'Maybe' a into 'Right' a, using the given error for 'Nothing'.
 hoistMaybe :: Monad m => x -> Maybe a -> EitherT x m a
 hoistMaybe x =
   maybe (left x) return
 {-# INLINE hoistMaybe #-}
 
--- | Hoist 'Either' m into an 'Either' n.
+-- | Change the base monad of an 'EitherT' using a natural transformation.
 hoistEitherT :: (forall b. m b -> n b) -> EitherT x m a -> EitherT x n a
 hoistEitherT f =
   EitherT . f . runEitherT
@@ -231,9 +232,11 @@ catchLeftT = flip handleLeftT
 {-# INLINE catchLeftT #-}
 
 -- | Acquire a resource in 'EitherT' and then perform an action with
--- it, cleaning up afterwards regardless of 'left'.
+-- it, cleaning up afterwards regardless of 'left'. If the cleanup returns
+-- 'left', its error replaces the result of the action.
 --
--- This function does not clean up in the event of an exception.
+-- This function does not clean up in the event of an exception, or when the
+-- base monad short-circuits (e.g. 'Nothing' in @MaybeT@).
 -- Prefer 'bracketExceptionT' in any impure setting.
 bracketEitherT :: Monad m => EitherT e m a -> (a -> EitherT e m b) -> (a -> EitherT e m c) -> EitherT e m c
 bracketEitherT before after thing = do
@@ -245,12 +248,15 @@ bracketEitherT before after thing = do
     return r
 {-# INLINE bracketEitherT #-}
 
--- | Acquire a resource in EitherT and then perform an action with it,
+-- | Acquire a resource in 'EitherT' and then perform an action with it,
 -- cleaning up afterwards regardless of 'left' or exception.
 --
 -- Like 'bracketEitherT', but the cleanup is called even when the bracketed
--- function throws an exception. Exceptions in the bracketed function are caught
--- to allow the cleanup to run and then rethrown.
+-- function throws an exception or the base monad short-circuits (e.g.
+-- 'Nothing' in @MaybeT@). Exceptions in the bracketed function are caught to
+-- allow the cleanup to run and then rethrown, even if the cleanup returns
+-- 'left'. Otherwise, if the cleanup returns 'left', its error replaces the
+-- result of the action.
 bracketExceptionT ::
      MonadMask m
   => EitherT e m a
@@ -286,7 +292,7 @@ bracketExceptionT acquire release run =
 --
 -- If the bracketed action throws, the finalizer is run and the exception is
 -- always rethrown, whatever the finalizer returns. If the base monad
--- short-circuits (e.g. 'Nothing' in 'MaybeT'), the finalizer is still run.
+-- short-circuits (e.g. 'Nothing' in @MaybeT@), the finalizer is still run.
 --
 bracketF :: MonadMask m => m a -> (a -> m (Either b c)) -> (a -> m b) -> m b
 bracketF a f g = do
