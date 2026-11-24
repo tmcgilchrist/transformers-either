@@ -2,7 +2,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
-import           Control.Exception (ArithException (..), IOException, SomeException, bracket, fromException, throwIO, try)
+import           Control.Concurrent (forkIO, killThread, threadDelay)
+import           Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import           Control.Exception (ArithException (..), IOException, SomeException, bracket, finally, fromException, throwIO, try)
 import           Control.Monad (unless)
 import           Control.Monad.Catch (Handler (..))
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -44,6 +46,7 @@ tests = Group "Control.Monad.Trans.Except.Extra"
   , ("prop_handleExceptT", prop_handleExceptT)
   , ("prop_hushM_onLeft_onNothing", prop_hushM_onLeft_onNothing)
   , ("prop_orDieWithCode", prop_orDieWithCode)
+  , ("prop_bracketExceptionT_async", prop_bracketExceptionT_async)
   ]
 
 ------------------------------------------------------------------------
@@ -331,3 +334,22 @@ prop_orDieWithCode = property $ do
     _ -> do
       annotateShow (fmap (const ()) r)
       failure
+
+-- | Killing the thread while the body runs still releases exactly once, and
+-- release can be asked to fail without affecting that.
+prop_bracketExceptionT_async :: Property
+prop_bracketExceptionT_async = withTests 20 . property $ do
+  rel <- forAll (Gen.either genErr (pure ()))
+  ref <- evalIO (newIORef (0 :: Int))
+  n <- evalIO $ do
+    inBody <- newEmptyMVar
+    done <- newEmptyMVar
+    let body _ = liftIO (putMVar inBody () >> threadDelay 10000000) :: ExceptT String IO ()
+    tid <- forkIO $
+      (() <$ runExceptT (bracketExceptionT (right ()) (countingRelease ref rel) body))
+        `finally` putMVar done ()
+    takeMVar inBody
+    killThread tid
+    takeMVar done
+    readIORef ref
+  n === 1
