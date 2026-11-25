@@ -27,7 +27,7 @@ source-repository head
 library
   build-depends:
     , base          >=4.8 && <5
-    , exceptions    >=0.6 && <0.11
+    , exceptions    >=0.9 && <0.11
     , text          >= 1.2 && <2.2
     , transformers  >=0.4 && <0.7
 
@@ -37,3 +37,18 @@ library
   exposed-modules:
     Control.Monad.Trans.Either
     Control.Monad.Trans.Either.Exit
+
+test-suite test
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   test
+  default-language: Haskell2010
+  ghc-options:      -Wall -threaded
+  build-depends:
+    , base
+    , directory
+    , exceptions
+    , hedgehog      >=1.0 && <1.8
+    , text
+    , transformers
+    , transformers-either
